@@ -1,7 +1,32 @@
-@import 'leaflet/dist/leaflet.css';
+@import "leaflet/dist/leaflet.css";
 @import "tailwindcss";
+@import "leaflet-draw/dist/leaflet.draw.css";
 
 .leaflet-container {
   height: 100%;
   width: 100%;
+}
+
+/* Style for the new "Go to My Location" button */
+.leaflet-bar button,
+.leaflet-bar button:hover {
+  background-color: #fff;
+  border: none;
+  border-bottom: 1px solid #ccc;
+  width: 30px;
+  height: 30px;
+  line-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #333;
+}
+
+.leaflet-bar button:hover {
+  background-color: #f4f4f4;
+}
+
+.leaflet-bar button:last-of-type {
+  border-bottom: none;
 }

@@ -1,12 +1,18 @@
 import React, { useState, useEffect, useRef } from "react";
-import api from "../../services/api";
+import api from "@/services/api";
 import toast from "react-hot-toast";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 import Webcam from "react-webcam";
-import { loadModels, getFaceDescriptor, matchFace } from "../../utils/faceApi.js";
-import { isWithinGeofence } from "../../utils/geo.js";
-import Spinner from "../../components/Spinner.jsx";
-import { MapContainer, TileLayer, Marker, Circle } from "react-leaflet";
+import { loadModels, getFaceDescriptor, matchFace } from "@/utils/faceApi";
+import { isWithinGeofence } from "@/utils/geo";
+import Spinner from "@/components/Spinner";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Circle,
+  Polygon,
+} from "react-leaflet";
 import { Check, X, Camera } from "lucide-react";
 import io from "socket.io-client";
 
@@ -65,9 +71,8 @@ const StudentDashboard = () => {
         setUserCoords(coords);
         const inside = isWithinGeofence(
           coords,
-          sessionData.activeSession.location,
-          sessionData.activeSession.location.radius
-        );
+          sessionData.activeSession.location
+        ); // Pass the whole location object
         setStatus((s) => ({
           ...s,
           isInside: inside,
@@ -168,14 +173,14 @@ const StudentDashboard = () => {
       </div>
     );
 
+  const location = activeSession.location;
+
   return (
     <div className="p-6 bg-white rounded-lg shadow-lg">
       <h1 className="text-2xl font-bold mb-1">
         Active Session: {activeSession.name}
       </h1>
-      <p className="text-gray-600 mb-6">
-        Location: {activeSession.location.name}
-      </p>
+      <p className="text-gray-600 mb-6">Location: {location.name}</p>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
@@ -276,23 +281,29 @@ const StudentDashboard = () => {
         </div>
         <div className="h-80 lg:h-full rounded-lg overflow-hidden border">
           <MapContainer
-            center={[
-              activeSession.location.latitude,
-              activeSession.location.longitude,
-            ]}
+            center={
+              location.shapeType === "Circle"
+                ? [location.center.lat, location.center.lng]
+                : [location.path[0].lat, location.path[0].lng]
+            }
             zoom={15}
             scrollWheelZoom={true}
             className="h-full w-full"
           >
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-            <Circle
-              center={[
-                activeSession.location.latitude,
-                activeSession.location.longitude,
-              ]}
-              radius={activeSession.location.radius}
-              pathOptions={{ color: "blue", fillColor: "blue" }}
-            />
+            {location.shapeType === "Circle" && (
+              <Circle
+                center={[location.center.lat, location.center.lng]}
+                radius={location.radius}
+                pathOptions={{ color: "blue", fillColor: "blue" }}
+              />
+            )}
+            {location.shapeType === "Polygon" && (
+              <Polygon
+                positions={location.path.map((p) => [p.lat, p.lng])}
+                pathOptions={{ color: "blue", fillColor: "blue" }}
+              />
+            )}
             {userCoords && (
               <Marker position={[userCoords.latitude, userCoords.longitude]} />
             )}

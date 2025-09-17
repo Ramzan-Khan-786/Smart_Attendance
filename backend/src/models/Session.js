@@ -6,7 +6,6 @@ const SessionSchema = new mongoose.Schema({
   startTime: { type: Date, default: Date.now },
   endTime: { type: Date },
   isActive: { type: Boolean, default: true },
-  excelPath: { type: String },
 });
 
 export default mongoose.model("Session", SessionSchema);

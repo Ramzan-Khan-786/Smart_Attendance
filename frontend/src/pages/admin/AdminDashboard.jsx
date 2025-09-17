@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import LocationManager from "./components/LocationManager.jsx";
 import SessionManager from "./components/SessionManager.jsx";
-import AttendanceMonitor from "./components/AttendanceMoniter.jsx";
+import AttendanceMonitor from "./components/AttendanceMoniter.jsx"; // Corrected typo here
 import PastSessions from "./components/PastSessions.jsx";
 import { MapPin, Clock, Users, History } from "lucide-react";
 

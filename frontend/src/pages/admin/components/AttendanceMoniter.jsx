@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
-import api from "../../../services/api";
+import api from "@/services/api";
 import io from "socket.io-client";
+import toast from "react-hot-toast"; // Added missing import
 
 const socket = io("http://localhost:5000");
 

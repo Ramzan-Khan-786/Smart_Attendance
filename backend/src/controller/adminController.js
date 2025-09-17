@@ -1,20 +1,40 @@
 import Location from "../models/Location.js";
 import Session from "../models/Session.js";
 import Attendance from "../models/Attendance.js";
-import generateExcel from "../utils/generateExcel.js";
-import path from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import generateExcelBuffer from "../utils/generateExcel.js";
 
 export const addLocation = async (req, res) => {
-  const { name, latitude, longitude, radius } = req.body;
   try {
-    const newLocation = new Location({ name, latitude, longitude, radius });
+    const newLocation = new Location(req.body);
     const location = await newLocation.save();
     res.status(201).json(location);
   } catch (err) {
+    console.error("Add Location Error:", err);
+    res.status(500).send("Server Error");
+  }
+};
+
+export const deleteLocation = async (req, res) => {
+  try {
+    const locationId = req.params.id;
+    const activeSession = await Session.findOne({
+      location: locationId,
+      isActive: true,
+    });
+
+    if (activeSession) {
+      return res.status(400).json({
+        msg: "Cannot delete a location that is part of an active session.",
+      });
+    }
+
+    const location = await Location.findByIdAndDelete(locationId);
+    if (!location) {
+      return res.status(404).json({ msg: "Location not found" });
+    }
+    res.json({ msg: "Location removed" });
+  } catch (err) {
+    console.error("Delete Location Error:", err);
     res.status(500).send("Server Error");
   }
 };
@@ -42,13 +62,12 @@ export const startSession = async (req, res) => {
     const newSession = new Session({ name, location: locationId });
     await newSession.save();
 
-    const sessionData = {
-      ...newSession.toObject(),
-      location: location.toObject(),
-    };
+    const populatedSession = await Session.findById(newSession._id).populate(
+      "location"
+    );
 
-    global.io.emit("session-started", sessionData);
-    res.status(201).json(sessionData);
+    global.io.emit("session-started", populatedSession);
+    res.status(201).json(populatedSession);
   } catch (err) {
     console.error("Start Session Error:", err);
     res.status(500).send("Server Error");
@@ -61,18 +80,9 @@ export const endSession = async (req, res) => {
     if (!session)
       return res.status(404).json({ msg: "No active session found" });
 
+    // Simply end the session. No need to generate Excel here.
     session.isActive = false;
     session.endTime = new Date();
-
-    const attendanceRecords = await Attendance.find({
-      session: session._id,
-    }).populate("user", "name email");
-
-    if (attendanceRecords.length > 0) {
-      const reportPath = await generateExcel(attendanceRecords, session.name);
-      session.excelPath = reportPath;
-    }
-
     await session.save();
 
     global.io.emit("session-ended", { sessionId: session._id.toString() });
@@ -109,33 +119,43 @@ export const getPreviousSessions = async (req, res) => {
   }
 };
 
-// ADD THIS FUNCTION BACK - WITH THE CORRECTED PATH
-export const downloadReport = (req, res) => {
+export const downloadReport = async (req, res) => {
   try {
-    const { filename } = req.params;
+    // Correctly use sessionId from the route parameter
+    const { sessionId } = req.params;
 
-    // THE FIX: Construct the absolute path to the project's root `reports` folder
-    // We go up two directories from `src/controller` to the project root
-    const filePath = path.resolve(__dirname, "..", "..", "reports", filename);
-
-    console.log("Attempting to download file from secure route:", filePath);
-
-    // res.download() handles headers and file streaming
-    res.download(filePath, filename, (err) => {
-      if (err) {
-        console.error("Error sending file:", err);
-        // Don't send a generic "File not found" if headers are already sent
-        if (!res.headersSent) {
-          res
-            .status(404)
-            .send({ message: "File not found or cannot be read." });
-        }
-      }
-    });
-  } catch (err) {
-    console.error("Server error on download:", err);
-    if (!res.headersSent) {
-      res.status(500).send("Server error during file download");
+    const session = await Session.findById(sessionId);
+    if (!session) {
+      return res.status(404).json({ message: "Session not found" });
     }
+
+    const data = await Attendance.find({ session: sessionId }).populate(
+      "user",
+      "name email"
+    );
+
+    if (!data || data.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "No attendance records found for this session." });
+    }
+
+    const buffer = await generateExcelBuffer(data, session.name);
+
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=Attendance-${session.name.replace(
+        /\s+/g,
+        "_"
+      )}-${sessionId}.xlsx`
+    );
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.send(buffer);
+  } catch (err) {
+    console.error("Download error:", err);
+    res.status(500).json({ message: "Failed to generate report" });
   }
 };
