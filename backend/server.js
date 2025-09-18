@@ -23,7 +23,7 @@ app.use(express.json({ limit: "50mb" }));
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: "https://smart-attendance-mu.vercel.app/",
     methods: ["GET", "POST", "PUT"],
   },
 });
