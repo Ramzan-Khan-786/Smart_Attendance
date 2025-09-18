@@ -9,15 +9,19 @@ import {
   getPresentUsers,
   getPreviousSessions,
   downloadReport,
+  getAllUsersForMatching, // import new function
+  markAttendanceByAdmin, // import new function
 } from "../controller/adminController.js";
 
 const router = express.Router();
 
-// All admin routes are protected by auth and isAdmin middleware
+router.get("/sessions/download/:sessionId", downloadReport);
+
 router.use(auth, isAdmin);
 
-// Correct the route parameter to :sessionId
-router.get("/sessions/download/:sessionId", downloadReport);
+// Add the two new routes
+router.get("/users/match-data", getAllUsersForMatching);
+router.post("/attendance/mark", markAttendanceByAdmin);
 
 router.post("/locations", addLocation);
 router.get("/locations", getLocations);

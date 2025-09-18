@@ -2,7 +2,7 @@ import Location from "../models/Location.js";
 import Session from "../models/Session.js";
 import Attendance from "../models/Attendance.js";
 import generateExcelBuffer from "../utils/generateExcel.js";
-
+import User from "../models/User.js";
 export const addLocation = async (req, res) => {
   try {
     const newLocation = new Location(req.body);
@@ -157,5 +157,51 @@ export const downloadReport = async (req, res) => {
   } catch (err) {
     console.error("Download error:", err);
     res.status(500).json({ message: "Failed to generate report" });
+  }
+};
+// NEW FUNCTION: Fetch all user data needed for face matching
+export const getAllUsersForMatching = async (req, res) => {
+  try {
+    // Select only the fields needed to minimize data transfer
+    const users = await User.find().select("name faceDescriptor");
+    res.json(users);
+  } catch (err) {
+    console.error("Get All Users Error:", err);
+    res.status(500).send("Server Error");
+  }
+};
+
+// NEW FUNCTION: Allow admin to mark attendance for a specific user
+export const markAttendanceByAdmin = async (req, res) => {
+  const { userId, sessionId } = req.body;
+  try {
+    // Check if attendance is already marked for this user in this session
+    const existingAttendance = await Attendance.findOne({
+      user: userId,
+      session: sessionId,
+    });
+    if (existingAttendance) {
+      return res.status(200).json({ msg: "Attendance already marked." });
+    }
+
+    // Create new attendance record
+    const newAttendance = new Attendance({
+      user: userId,
+      session: sessionId,
+      isVerified: true, // Marked by admin, so it's considered verified
+    });
+    await newAttendance.save();
+
+    const populatedAttendance = await Attendance.findById(
+      newAttendance._id
+    ).populate("user", "name email");
+
+    // Notify all clients that a new user has been marked present
+    global.io.emit("user-verified", populatedAttendance);
+
+    res.status(201).json(populatedAttendance);
+  } catch (err) {
+    console.error("Mark Attendance by Admin Error:", err);
+    res.status(500).send("Server Error");
   }
 };

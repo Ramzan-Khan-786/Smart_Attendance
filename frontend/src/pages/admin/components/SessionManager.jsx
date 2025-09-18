@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
-import api from "../../../services/api";
+import api from "@/services/api";
 import toast from "react-hot-toast";
 import io from "socket.io-client";
-import { PlayCircle, StopCircle } from "lucide-react";
+import { PlayCircle, StopCircle, Camera } from "lucide-react";
+import CameraScanner from "./CameraScanner"; // Import the new component
 
 const socket = io("http://localhost:5000");
 
@@ -11,6 +12,7 @@ const SessionManager = () => {
   const [sessionName, setSessionName] = useState("");
   const [selectedLocation, setSelectedLocation] = useState("");
   const [activeSession, setActiveSession] = useState(null);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
 
   const fetchInitialData = async () => {
     try {
@@ -28,7 +30,10 @@ const SessionManager = () => {
     socket.on("session-started", (sessionData) =>
       setActiveSession(sessionData)
     );
-    socket.on("session-ended", () => setActiveSession(null));
+    socket.on("session-ended", () => {
+      setActiveSession(null);
+      setIsScannerOpen(false); // Close scanner when session ends
+    });
     return () => {
       socket.off("session-started");
       socket.off("session-ended");
@@ -63,21 +68,43 @@ const SessionManager = () => {
     return (
       <div>
         <h2 className="text-2xl font-bold mb-4 text-gray-800">
-          Session Control
+          Active Session Control
         </h2>
-        <div className="p-8 text-center border-2 border-dashed border-red-400 rounded-lg bg-red-50">
-          <p className="text-xl font-semibold text-gray-700 mb-2">
-            Session "{activeSession.name}" is active.
+        <div className="p-6 text-center border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 space-y-4">
+          <p className="text-xl font-semibold text-gray-700">
+            Session "{activeSession.name}" is running.
           </p>
-          <p className="text-gray-500 mb-4">
-            Location: {activeSession.location.name}
-          </p>
-          <button
-            onClick={handleEndSession}
-            className="py-3 px-6 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 flex items-center justify-center gap-2 mx-auto"
-          >
-            <StopCircle /> End Current Session
-          </button>
+
+          {isScannerOpen ? (
+            <div>
+              <h3 className="font-semibold mb-2">Live Attendance Scanner</h3>
+              <CameraScanner
+                activeSession={activeSession}
+                onUserMarked={() => {}}
+              />
+              <button
+                onClick={() => setIsScannerOpen(false)}
+                className="mt-4 px-4 py-2 text-sm bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
+              >
+                Close Scanner
+              </button>
+            </div>
+          ) : (
+            <div className="flex justify-center items-center gap-4">
+              <button
+                onClick={() => setIsScannerOpen(true)}
+                className="py-3 px-6 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+              >
+                <Camera /> Open Camera Scanner
+              </button>
+              <button
+                onClick={handleEndSession}
+                className="py-3 px-6 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 flex items-center justify-center gap-2"
+              >
+                <StopCircle /> End Session
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );
