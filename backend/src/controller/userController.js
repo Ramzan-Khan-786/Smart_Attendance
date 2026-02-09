@@ -23,6 +23,7 @@ export const markAttendance = async (req, res) => {
       user: userId,
       session: sessionId,
       isVerified: true,
+      adminId: session.adminId, // <-- FIX: Add adminId for consistency
     });
     await attendance.save();
 
@@ -40,19 +41,33 @@ export const markAttendance = async (req, res) => {
 
 export const getActiveSession = async (req, res) => {
   try {
-    const activeSession = await Session.findOne({ isActive: true }).populate(
-      "location"
-    );
-    if (!activeSession) {
-      return res.json({ activeSession: null, userAttendance: null });
+    // 1. Find ALL active sessions, not just one.
+    const activeSessions = await Session.find({ isActive: true })
+      .populate("location")
+      .lean(); // .lean() makes it faster
+
+    // 2. If there are no sessions, return an empty array
+    if (!activeSessions || activeSessions.length === 0) {
+      return res.json({ activeSessions: [] });
     }
 
-    const userAttendance = await Attendance.findOne({
-      user: req.user.id,
-      session: activeSession._id,
-    });
+    // 3. For each active session, check if THIS user has attended
+    const sessionsWithAttendance = await Promise.all(
+      activeSessions.map(async (session) => {
+        const userAttendance = await Attendance.findOne({
+          user: req.user.id,
+          session: session._id,
+        }).lean();
 
-    res.json({ activeSession, userAttendance });
+        // Return the session details, plus the user's attendance status
+        return {
+          ...session,
+          userAttendance: userAttendance, // Will be null or the attendance doc
+        };
+      })
+    );
+
+    res.json({ activeSessions: sessionsWithAttendance });
   } catch (err) {
     console.error(err.message);
     res.status(500).send("Server Error");

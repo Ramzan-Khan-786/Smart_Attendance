@@ -5,7 +5,10 @@ import generateExcelBuffer from "../utils/generateExcel.js";
 import User from "../models/User.js";
 export const addLocation = async (req, res) => {
   try {
-    const newLocation = new Location(req.body);
+    const newLocation = new Location({
+      ...req.body,
+      adminID: req.user.id,
+    });
     const location = await newLocation.save();
     res.status(201).json(location);
   } catch (err) {
@@ -20,6 +23,7 @@ export const deleteLocation = async (req, res) => {
     const activeSession = await Session.findOne({
       location: locationId,
       isActive: true,
+      adminID: adminID,
     });
 
     if (activeSession) {
@@ -28,9 +32,14 @@ export const deleteLocation = async (req, res) => {
       });
     }
 
-    const location = await Location.findByIdAndDelete(locationId);
+    const location = await Location.findByOneAndDelete({
+      _id: locationId,
+      adminId: adminId,
+    });
     if (!location) {
-      return res.status(404).json({ msg: "Location not found" });
+      return res
+        .status(404)
+        .json({ msg: "Location not found or you do not own it" });
     }
     res.json({ msg: "Location removed" });
   } catch (err) {
@@ -41,7 +50,7 @@ export const deleteLocation = async (req, res) => {
 
 export const getLocations = async (req, res) => {
   try {
-    const locations = await Location.find();
+    const locations = await Location.find({ adminId: req.user.id });
     res.json(locations);
   } catch (err) {
     res.status(500).send("Server Error");
@@ -51,15 +60,22 @@ export const getLocations = async (req, res) => {
 export const startSession = async (req, res) => {
   const { name, locationId } = req.body;
   try {
-    const location = await Location.findById(locationId);
+    const location = await Location.findOne({
+      _id: locationId,
+      adminId: adminId,
+    });
     if (!location) return res.status(404).json({ msg: "Location not found" });
 
     await Session.updateMany(
-      { isActive: true },
+      { isActive: true, adminId: adminId },
       { $set: { isActive: false, endTime: new Date() } }
     );
 
-    const newSession = new Session({ name, location: locationId });
+    const newSession = new Session({
+      name,
+      location: locationId,
+      adminId: adminId,
+    });
     await newSession.save();
 
     const populatedSession = await Session.findById(newSession._id).populate(
@@ -76,7 +92,10 @@ export const startSession = async (req, res) => {
 
 export const endSession = async (req, res) => {
   try {
-    const session = await Session.findOne({ isActive: true });
+    const session = await Session.findOne({
+      isActive: true,
+      adminId: req.user.id,
+    });
     if (!session)
       return res.status(404).json({ msg: "No active session found" });
 
@@ -96,7 +115,10 @@ export const endSession = async (req, res) => {
 
 export const getPresentUsers = async (req, res) => {
   try {
-    const activeSession = await Session.findOne({ isActive: true });
+    const activeSession = await Session.findOne({
+      isActive: true,
+      adminId: req.user.id,
+    });
     if (!activeSession) return res.json([]);
 
     const attendance = await Attendance.find({
@@ -110,7 +132,10 @@ export const getPresentUsers = async (req, res) => {
 
 export const getPreviousSessions = async (req, res) => {
   try {
-    const sessions = await Session.find({ isActive: false })
+    const sessions = await Session.find({
+      isActive: false,
+      adminId: req.user.id,
+    })
       .populate("location")
       .sort({ startTime: -1 });
     res.json(sessions);
@@ -124,9 +149,14 @@ export const downloadReport = async (req, res) => {
     // Correctly use sessionId from the route parameter
     const { sessionId } = req.params;
 
-    const session = await Session.findById(sessionId);
+    const session = await Session.findById({
+      _id: sessionId,
+      adminId: req.user.id,
+    });
     if (!session) {
-      return res.status(404).json({ message: "Session not found" });
+      return res
+        .status(404)
+        .json({ message: "Session not found or you do not own it" });
     }
 
     const data = await Attendance.find({ session: sessionId }).populate(
@@ -174,7 +204,14 @@ export const getAllUsersForMatching = async (req, res) => {
 // NEW FUNCTION: Allow admin to mark attendance for a specific user
 export const markAttendanceByAdmin = async (req, res) => {
   const { userId, sessionId } = req.body;
+  const adminId = req.user.id;
   try {
+    const session = await Session.findOne({ _id: sessionId, adminId: adminId });
+    if (!session) {
+      return res
+        .status(403)
+        .json({ msg: "Access denied. You do not own this session." });
+    }
     // Check if attendance is already marked for this user in this session
     const existingAttendance = await Attendance.findOne({
       user: userId,
@@ -189,6 +226,7 @@ export const markAttendanceByAdmin = async (req, res) => {
       user: userId,
       session: sessionId,
       isVerified: true, // Marked by admin, so it's considered verified
+      adminId: adminId,
     });
     await newAttendance.save();
 

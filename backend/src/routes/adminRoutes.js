@@ -14,10 +14,10 @@ import {
 } from "../controller/adminController.js";
 
 const router = express.Router();
-
+router.use(auth, isAdmin);
 router.get("/sessions/download/:sessionId", downloadReport);
 
-router.use(auth, isAdmin);
+
 
 // Add the two new routes
 router.get("/users/match-data", getAllUsersForMatching);

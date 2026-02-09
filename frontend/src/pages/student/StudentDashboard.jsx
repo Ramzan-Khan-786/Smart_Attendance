@@ -13,18 +13,16 @@ import {
   Circle,
   Polygon,
 } from "react-leaflet";
-import { Check, X, Camera } from "lucide-react";
+import { Check, X, Camera, LogIn } from "lucide-react"; // Added LogIn
 import io from "socket.io-client";
 
-const socket = io("http://localhost:5000");
+// --- FIX: Use the VITE_API_URL or a fallback for production ---
+const socket = io(import.meta.env.VITE_API_URL || "http://localhost:5000");
 
-const StudentDashboard = () => {
-  const [sessionData, setSessionData] = useState({
-    activeSession: null,
-    userAttendance: null,
-  });
+// --- FIX: A new component to render the details of a selected session ---
+// I have moved your main UI into this new component.
+const SessionDetails = ({ session, user, onAttendanceMarked }) => {
   const [status, setStatus] = useState({
-    loading: true,
     verifying: false,
     modelsLoaded: false,
     isInside: null,
@@ -32,32 +30,11 @@ const StudentDashboard = () => {
     message: "Initializing...",
   });
   const [userCoords, setUserCoords] = useState(null);
-
-  const { user } = useAuth();
   const webcamRef = useRef(null);
 
+  // --- FIX: Load models when this component mounts ---
   useEffect(() => {
     loadModels().then(() => setStatus((s) => ({ ...s, modelsLoaded: true })));
-
-    const fetchSession = async () => {
-      try {
-        const res = await api.get("/user/sessions/active");
-        setSessionData(res.data);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setStatus((s) => ({ ...s, loading: false }));
-      }
-    };
-
-    fetchSession();
-
-    socket.on("session-ended", () => {
-      toast.info("The current session has ended.");
-      setSessionData({ activeSession: null, userAttendance: null });
-    });
-
-    return () => socket.off("session-ended");
   }, []);
 
   const checkLocation = () => {
@@ -69,10 +46,8 @@ const StudentDashboard = () => {
           longitude: position.coords.longitude,
         };
         setUserCoords(coords);
-        const inside = isWithinGeofence(
-          coords,
-          sessionData.activeSession.location
-        ); // Pass the whole location object
+        // --- FIX: Pass the location object from the session ---
+        const inside = isWithinGeofence(coords, session.location);
         setStatus((s) => ({
           ...s,
           isInside: inside,
@@ -118,6 +93,7 @@ const StudentDashboard = () => {
       const distance = matchFace(user.faceDescriptor, liveDescriptor);
 
       if (distance < 0.5) {
+        // 0.5 is a good threshold
         toast.success("Face verified!");
         setStatus((s) => ({
           ...s,
@@ -125,13 +101,12 @@ const StudentDashboard = () => {
           message: "Marking attendance...",
         }));
         try {
-          await api.post("/user/attendance/mark", {
-            sessionId: sessionData.activeSession._id,
+          // --- FIX: Pass the correct session ID ---
+          const res = await api.post("/user/attendance/mark", {
+            sessionId: session._id,
           });
-          setSessionData((prev) => ({
-            ...prev,
-            userAttendance: { marked: true },
-          }));
+          // --- FIX: Call the parent function to update state ---
+          onAttendanceMarked(res.data);
           toast.success("Attendance marked successfully!");
           setStatus((s) => ({ ...s, message: "Attendance Marked!" }));
         } catch (err) {
@@ -149,36 +124,25 @@ const StudentDashboard = () => {
     };
   };
 
-  const { activeSession, userAttendance } = sessionData;
-  const { loading, isInside, isVerified, verifying, message } = status;
+  // --- FIX: Get status from this component's state ---
+  const { isInside, isVerified, verifying, message } = status;
+  const location = session.location;
 
-  if (loading)
-    return (
-      <div className="flex justify-center mt-10">
-        <Spinner size="large" />
-      </div>
-    );
-  if (!activeSession)
-    return (
-      <div className="text-center p-8 bg-white rounded-lg shadow">
-        <p>No active attendance session at the moment.</p>
-      </div>
-    );
-  if (userAttendance)
+  // --- FIX: Check the session's userAttendance property ---
+  if (session.userAttendance) {
     return (
       <div className="text-center p-8 bg-white rounded-lg shadow">
         <p className="text-green-600 font-bold text-xl">
-          ✅ Your attendance for "{activeSession.name}" has been marked.
+          ✅ Your attendance for "{session.name}" has been marked.
         </p>
       </div>
     );
-
-  const location = activeSession.location;
+  }
 
   return (
     <div className="p-6 bg-white rounded-lg shadow-lg">
       <h1 className="text-2xl font-bold mb-1">
-        Active Session: {activeSession.name}
+        Active Session: {session.name}
       </h1>
       <p className="text-gray-600 mb-6">Location: {location.name}</p>
 
@@ -211,18 +175,6 @@ const StudentDashboard = () => {
                     <X className="text-red-500" />
                   )}{" "}
                   Camera Verified
-                </li>
-                <li
-                  className={`flex items-center gap-2 ${
-                    userAttendance ? "" : "text-gray-400"
-                  }`}
-                >
-                  {userAttendance ? (
-                    <Check className="text-green-500" />
-                  ) : (
-                    <X className="text-red-500" />
-                  )}{" "}
-                  Attendance Marked
                 </li>
               </ul>
             </div>
@@ -312,6 +264,145 @@ const StudentDashboard = () => {
       </div>
     </div>
   );
+};
+
+// --- THIS IS THE MAIN COMPONENT ---
+const StudentDashboard = () => {
+  // --- FIX 1: New state to handle a list of sessions ---
+  const [activeSessions, setActiveSessions] = useState([]);
+  const [selectedSession, setSelectedSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+  // --------------------------------------------------
+
+  const { user } = useAuth();
+
+  useEffect(() => {
+    const fetchSession = async () => {
+      try {
+        // --- FIX 2: API now returns { activeSessions: [...] } ---
+        const res = await api.get("/user/sessions/active");
+        setActiveSessions(res.data.activeSessions);
+
+        // --- FIX 3: Smart auto-select if only one session ---
+        if (res.data.activeSessions.length === 1) {
+          setSelectedSession(res.data.activeSessions[0]);
+        }
+        // ----------------------------------------------------
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSession();
+
+    // --- FIX 4: Real-time updates for sessions ---
+    socket.on("session-started", (newSession) => {
+      toast.info(`New session started: ${newSession.name}`);
+      // Add the new session to the list
+      setActiveSessions((prev) => [...prev, newSession]);
+    });
+
+    socket.on("session-ended", ({ sessionId }) => {
+      toast.info("A session has ended.");
+      // Remove from the main list
+      setActiveSessions((prev) => prev.filter((s) => s._id !== sessionId));
+      // If it was the selected session, go back to the list
+      setSelectedSession((prev) =>
+        prev && prev._id === sessionId ? null : prev
+      );
+    });
+
+    return () => {
+      socket.off("session-started");
+      socket.off("session-ended");
+    };
+    // ---------------------------------------------
+  }, []);
+
+  // --- FIX 5: Function to update state when attendance is marked ---
+  const handleAttendanceMarked = (attendanceRecord) => {
+    // Find the session in our list and update its userAttendance
+    const updatedSession = {
+      ...selectedSession,
+      userAttendance: attendanceRecord,
+    };
+
+    // Update the main list
+    setActiveSessions((prev) =>
+      prev.map((s) => (s._id === updatedSession._id ? updatedSession : s))
+    );
+    // Update the selected session (to show the success message)
+    setSelectedSession(updatedSession);
+  };
+  // -----------------------------------------------------------
+
+  // --- FIX 6: New render logic ---
+  if (loading) {
+    return (
+      <div className="flex justify-center mt-10">
+        <Spinner size="large" />
+      </div>
+    );
+  }
+
+  // No sessions are active
+  if (activeSessions.length === 0) {
+    return (
+      <div className="text-center p-8 bg-white rounded-lg shadow">
+        <p>No active attendance session at the moment.</p>
+      </div>
+    );
+  }
+
+  // A session is selected, show the details
+  if (selectedSession) {
+    return (
+      <SessionDetails
+        session={selectedSession}
+        user={user}
+        onAttendanceMarked={handleAttendanceMarked}
+      />
+    );
+  }
+
+  // --- FIX 7: NEW UI: The Session Selection List ---
+  // More than one session, and none selected yet
+  return (
+    <div className="p-6 bg-white rounded-lg shadow-lg">
+      <h1 className="text-2xl font-bold mb-4">Active Sessions</h1>
+      <p className="text-gray-600 mb-6">
+        Multiple sessions are active. Please choose one to join.
+      </p>
+      <div className="space-y-4">
+        {activeSessions.map((session) => (
+          <div
+            key={session._id}
+            className="p-4 border rounded-lg flex justify-between items-center"
+          >
+            <div>
+              <h2 className="font-semibold text-lg">{session.name}</h2>
+              <p className="text-sm text-gray-500">{session.location.name}</p>
+            </div>
+            {session.userAttendance ? (
+              <span className="text-green-600 font-semibold flex items-center gap-2">
+                <Check size={18} /> Marked
+              </span>
+            ) : (
+              <button
+                onClick={() => setSelectedSession(session)}
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-2"
+              >
+                <LogIn size={16} /> Join
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+  // ------------------------------------------------
 };
 
 export default StudentDashboard;

@@ -20,6 +20,11 @@ const LocationSchema = new mongoose.Schema({
       lng: { type: Number },
     },
   ],
+  adminId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Admin",
+    required: true,
+  },
 });
 
 export default mongoose.model("Location", LocationSchema);

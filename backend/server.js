@@ -17,13 +17,22 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-app.use(cors());
+const allowedOrigins = [
+  "https://smart-attendance-mu.vercel.app",
+  "http://localhost:3000",
+];
+
+app.use(
+  cors({
+    origin: allowedOrigins,
+  })
+);
 app.use(express.json({ limit: "50mb" }));
 
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "https://smart-attendance-mu.vercel.app/",
+    origin: ["https://smart-attendance-mu.vercel.app", "http://localhost:3000"],
     methods: ["GET", "POST", "PUT"],
   },
 });
@@ -35,7 +44,6 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/user", userRoutes);
 app.use("/reports", express.static(path.join(__dirname, "reports")));
 
-// ✅ Serve frontend build in production
 if (process.env.NODE_ENV === "production") {
   const frontendPath = path.join(__dirname, "../frontend/dist");
   app.use(express.static(frontendPath));

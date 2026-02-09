@@ -9,6 +9,11 @@ const AttendanceSchema = new mongoose.Schema({
   },
   timestamp: { type: Date, default: Date.now },
   isVerified: { type: Boolean, default: false },
+  adminId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Admin",
+    required: true,
+  },
 });
 
 AttendanceSchema.index({ user: 1, session: 1 }, { unique: true });

@@ -19,6 +19,16 @@ function App() {
     <AuthProvider>
       <Router>
         <div className="min-h-screen bg-gray-50 font-sans">
+          
+          <div className="bg-amber-500 text-white py-2 px-4 text-center text-sm font-bold uppercase tracking-widest shadow-md">
+            <span className="inline-flex items-center gap-2">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-200 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-100"></span>
+              </span>
+              Under Prototyping and Testing Phase...
+            </span>
+          </div>
           <Toaster position="top-center" reverseOrder={false} />
           <Navbar />
           <main className="container mx-auto p-4 md:p-6">
